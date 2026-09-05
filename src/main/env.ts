@@ -63,26 +63,35 @@ function runtimePython(): string {
     : join(runtimeDir(), 'python', 'bin', 'python3')
 }
 
-function runtimeArchivePath(): string {
+function runtimeTriple(): string {
   const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
-  const triple = IS_WIN ? `${arch}-pc-windows-msvc-shared` : `${arch}-apple-darwin`
-  return join(userDataDir(), `cpython-${PBS_VERSION}-${triple}-install_only.tar.gz`)
+  if (IS_WIN) return `${arch}-pc-windows-msvc-shared`
+  if (process.platform === 'darwin') return `${arch}-apple-darwin`
+  return `${arch}-unknown-linux-gnu`
+}
+
+function runtimeArchivePath(): string {
+  return join(userDataDir(), `cpython-${PBS_VERSION}-${runtimeTriple()}-install_only.tar.gz`)
 }
 
 function runtimeDownloadUrl(): string {
-  const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
-  const triple = IS_WIN ? `${arch}-pc-windows-msvc-shared` : `${arch}-apple-darwin`
   return (
     `https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/` +
-    `cpython-${PBS_VERSION}%2B${PBS_TAG}-${triple}-install_only.tar.gz`
+    `cpython-${PBS_VERSION}%2B${PBS_TAG}-${runtimeTriple()}-install_only.tar.gz`
   )
+}
+
+function ffmpegExtraDir(): string {
+  if (IS_WIN) return 'ffmpeg-win'
+  if (process.platform === 'darwin') return 'ffmpeg-mac'
+  return 'ffmpeg-linux'
 }
 
 export function bundledFfmpeg(): string | null {
   const name = 'ffmpeg' + EXE
   const candidates = app.isPackaged
     ? [join(process.resourcesPath, 'ffmpeg', name)]
-    : [join(app.getAppPath(), 'extras', IS_WIN ? 'ffmpeg-win' : 'ffmpeg-mac', name)]
+    : [join(app.getAppPath(), 'extras', ffmpegExtraDir(), name)]
   for (const c of candidates) {
     if (existsSync(c)) return c
   }
@@ -226,7 +235,7 @@ async function detectJsRuntime(): Promise<void> {
         join(homedir(), '.deno', 'bin', 'deno.exe'),
         join(process.env.LOCALAPPDATA ?? '', 'Programs', 'deno', 'deno.exe')
       ]
-    : ['/opt/homebrew/bin/deno', '/usr/local/bin/deno', join(homedir(), '.deno/bin/deno')]
+    : ['/opt/homebrew/bin/deno', '/usr/local/bin/deno', '/usr/bin/deno', join(homedir(), '.deno/bin/deno')]
   for (const p of denoPaths.filter((p): p is string => !!p && p.length > 0)) {
     if (existsSync(p)) {
       state.jsRuntime = { kind: 'deno', path: p }
@@ -252,7 +261,7 @@ async function detectJsRuntime(): Promise<void> {
       }
     } catch {}
   } else {
-    nodeCandidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node')
+    nodeCandidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node')
     const nvmRoot = join(homedir(), '.nvm/versions/node')
     try {
       for (const ver of readdirSync(nvmRoot)) {
@@ -317,6 +326,9 @@ function pyCandidates(): string[] {
     '/opt/homebrew/bin/python3',
     '/usr/local/bin/python3',
     '/usr/bin/python3',
+    '/usr/bin/python3.12',
+    '/usr/bin/python3.11',
+    '/usr/bin/python3.10',
     join(home, 'opt/anaconda3/bin/python3'),
     join(home, 'anaconda3/bin/python3'),
     join(home, 'miniconda3/bin/python3'),
@@ -362,13 +374,30 @@ interface PyProbe {
   machine: string
 }
 
+/* system pythons on Debian/Ubuntu often lack the venv module
+   (python3-venv not installed), which only surfaces later as a cryptic
+   "ensurepip is not available" failure. Filter them out up front so the
+   private runtime is picked instead */
+async function canCreateVenv(candidate: string): Promise<boolean> {
+  if (candidate === runtimePython()) return true
+  try {
+    await runCapture(candidate, ['-m', 'venv', '--help'], 10000)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function detectTools(): Promise<void> {
   const probes: PyProbe[] = []
   const candidates: string[] = []
   if (existsSync(runtimePython())) candidates.push(runtimePython())
   // STEMKIT_FORCE_RUNTIME=1 ignores system python so the private-runtime
-  // download path can be exercised on machines that have python installed
-  if (process.env.STEMKIT_FORCE_RUNTIME !== '1') candidates.push(...pyCandidates())
+  // download path can be exercised on machines that have python installed.
+  // On Linux the private runtime is preferred anyway: system pythons are
+  // commonly missing python3-venv and are PEP 668 externally-managed.
+  const preferRuntime = process.platform === 'linux' || process.env.STEMKIT_FORCE_RUNTIME === '1'
+  if (!preferRuntime) candidates.push(...pyCandidates())
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue
     try {
@@ -380,10 +409,34 @@ export async function detectTools(): Promise<void> {
       const minor = parseInt(version.split('.')[1], 10)
       const major = parseInt(version.split('.')[0], 10)
       if (major > 3 || (major === 3 && minor >= 10 && minor <= 12)) {
-        probes.push({ path: candidate, version, machine: machine ?? 'unknown' })
+        if (await canCreateVenv(candidate)) {
+          probes.push({ path: candidate, version, machine: machine ?? 'unknown' })
+        }
       }
     } catch {
       continue
+    }
+  }
+  // Linux fallback: no usable python yet (no runtime, system lacks venv
+  // module) — still probe system pythons so the error path can name one.
+  // bootstrap() below will prefer downloading the private runtime.
+  if (probes.length === 0 && preferRuntime) {
+    for (const candidate of pyCandidates()) {
+      if (!existsSync(candidate) || candidates.includes(candidate)) continue
+      try {
+        const out = await runCapture(candidate, [
+          '-c',
+          'import sys,platform;print("%d.%d %s"%(*sys.version_info[:2],platform.machine()))'
+        ])
+        const [version] = out.trim().split(/\s+/)
+        const minor = parseInt(version.split('.')[1], 10)
+        const major = parseInt(version.split('.')[0], 10)
+        if (major > 3 || (major === 3 && minor >= 10 && minor <= 12)) {
+          probes.push({ path: candidate, version, machine: 'no-venv-module' })
+        }
+      } catch {
+        continue
+      }
     }
   }
   probes.sort((a, b) => {
@@ -843,13 +896,55 @@ export async function bootstrap(): Promise<boolean> {
     const pip = venvPython()
 
     sendEnvEvent('Preparing workspace')
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(state.python.path as string, ['-m', 'venv', '--clear', venv])
-      child.on('close', (code) =>
-        code === 0 ? resolve() : reject(new Error(`venv creation failed (${code})`))
-      )
-      child.on('error', reject)
-    })
+    // On Linux the chosen python may lack the venv module (Debian/Ubuntu
+    // split it into the python3-venv apt package) even though the version
+    // probe passed. Retry once via the private runtime instead of dying.
+    const venvWith = (py: string): Promise<void> =>
+      new Promise<void>((resolve, reject) => {
+        let stderr = ''
+        const child = spawn(py, ['-m', 'venv', '--clear', venv])
+        child.stderr?.on('data', (c: Buffer) => {
+          stderr += c.toString()
+        })
+        child.on('close', (code) =>
+          code === 0
+            ? resolve()
+            : reject(
+                new Error(
+                  `venv creation failed (${code})${stderr ? `: ${stderr.slice(0, 300).trim()}` : ''}`
+                )
+              )
+        )
+        child.on('error', reject)
+      })
+    try {
+      await venvWith(state.python.path as string)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/ensurepip|venv/i.test(msg) && state.python.path !== runtimePython()) {
+        sendEnvEvent('System python lacks venv support — downloading private runtime instead')
+        state.python = { found: false }
+        if (!(await ensureRuntimePython())) return false
+        await detectTools()
+        if (!state.python.found || !state.python.path) {
+          sendEnvEvent('No suitable python3 found on this machine', 'error')
+          return false
+        }
+        try {
+          await venvWith(state.python.path as string)
+        } catch (err2) {
+          sendEnvEvent(err2 instanceof Error ? err2.message : String(err2), 'error')
+          return false
+        }
+      } else {
+        if (/ensurepip|venv/i.test(msg) && process.platform === 'linux') {
+          sendEnvEvent('venv creation failed: install the venv module (e.g. sudo apt install python3-venv) and retry', 'error')
+        } else {
+          sendEnvEvent(msg, 'error')
+        }
+        return false
+      }
+    }
 
     await new Promise<void>((resolve, reject) => {
       const child = spawn(pip, ['-m', 'pip', 'install', '-q', '-U', 'pip', 'wheel', 'setuptools'])

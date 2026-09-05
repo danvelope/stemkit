@@ -87,8 +87,10 @@ async function createWindow(): Promise<void> {
     minHeight: 680,
     show: false,
     backgroundColor: '#0b0b10',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 18, y: 20 },
+    // hiddenInset traffic lights are macOS-only; default frame elsewhere
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 20 } }
+      : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

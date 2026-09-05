@@ -48,7 +48,7 @@ function findNode(requiredMajor) {
       }
     } catch {}
   } else {
-    candidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node')
+    candidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node')
     const nvmRoot = path.join(os.homedir(), '.nvm', 'versions', 'node')
     try {
       for (const ver of fs.readdirSync(nvmRoot)) {
@@ -87,9 +87,10 @@ const STEPS = {
 }
 
 function ffmpegBin() {
-  return IS_WIN
-    ? path.join(ROOT, 'extras', 'ffmpeg-win', 'ffmpeg.exe')
-    : path.join(ROOT, 'extras', 'ffmpeg-mac', 'ffmpeg')
+  if (IS_WIN) return path.join(ROOT, 'extras', 'ffmpeg-win', 'ffmpeg.exe')
+  if (process.platform === 'darwin')
+    return path.join(ROOT, 'extras', 'ffmpeg-mac', 'ffmpeg')
+  return path.join(ROOT, 'extras', 'ffmpeg-linux', 'ffmpeg')
 }
 
 /* the app shells out to a bundled ffmpeg. CI fetches it before packaging, so
