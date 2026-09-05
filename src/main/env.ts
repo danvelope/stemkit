@@ -36,6 +36,10 @@ const IS_WIN = process.platform === 'win32'
 const EXE = IS_WIN ? '.exe' : ''
 const VENV_BIN = IS_WIN ? 'Scripts' : 'bin'
 
+/* CUDA torch (the GPU engine swap) works on windows and linux; macOS stays
+   on MPS/CPU via the default torch build */
+const SUPPORTS_GPU = IS_WIN || process.platform === 'linux'
+
 export function venvDir(): string {
   return join(userDataDir(), 'venv')
 }
@@ -158,10 +162,10 @@ export function gpuAccelerationInfo(): boolean | undefined {
 let nvidiaProbe: Promise<boolean> | null = null
 let nvidiaInfo: boolean | undefined
 
-/* windows only: whether an NVIDIA GPU is present (nvidia-smi ships with the
-   driver). Gates the GPU-acceleration toggle in Settings */
+/* windows + linux: whether an NVIDIA GPU is present (nvidia-smi ships with
+   the driver). Gates the GPU-acceleration toggle in Settings */
 export function detectNvidiaGpu(): Promise<boolean> {
-  if (!IS_WIN) {
+  if (!SUPPORTS_GPU) {
     nvidiaInfo = false
     return Promise.resolve(false)
   }
@@ -694,10 +698,12 @@ export function ensureFtWeights(onProgress?: (pct: number) => void): Promise<boo
   return ftWeightsPromise.then(detach)
 }
 
-/* CUDA build of torch (windows + nvidia). The default bootstrap installs the
-   CPU wheel from PyPI; this swaps in the cu121 build (~2.5GB download) on
-   demand when the GPU-acceleration toggle is enabled. It stays installed when
-   the toggle goes back off — CUDA torch handles cpu devices fine */
+/* CUDA build of torch (windows/linux + nvidia). The default bootstrap
+   installs the CPU wheel from PyPI (on linux pinned to the cpu index, since
+   the default linux wheel would otherwise pull CUDA deps for everyone);
+   this swaps in the cu121 build (~2.5GB download) on demand when the
+   GPU-acceleration toggle is enabled. It stays installed when the toggle
+   goes back off — CUDA torch handles cpu devices fine */
 const GPU_TORCH_VERSION = '2.5.1'
 const GPU_TORCH_INDEX = 'https://download.pytorch.org/whl/cu121'
 
@@ -713,7 +719,7 @@ export function ensureGpuEngine(
     if (onProgress) gpuProgressListeners.delete(onProgress)
     return true
   }
-  if (!IS_WIN) {
+  if (!SUPPORTS_GPU) {
     detach()
     return Promise.resolve(false)
   }
@@ -829,7 +835,7 @@ export function engineStatus(): EngineStatus {
     ftDownloading: ftWeightsPromise !== null,
     ftVerified,
     gpuDownloading: gpuEnginePromise !== null,
-    gpuReady: IS_WIN && gpuInfo === true
+    gpuReady: SUPPORTS_GPU && gpuInfo === true
   }
 }
 
@@ -956,6 +962,36 @@ export async function bootstrap(): Promise<boolean> {
 
     sendEnvEvent('Downloading the separation engine — grab a coffee')
     let lastGeneric = 0
+    // on linux the default PyPI torch wheel is CUDA-enabled and would pull
+    // ~2GB of nvidia deps for every user, GPU or not — install the cpu build
+    // in its own step (windows/mac defaults are already CPU, so only linux
+    // needs the override) and let the GPU toggle swap in cu121 on demand.
+    // --index-url can't be mixed into the big install below: the cpu index
+    // only hosts torch packages, so non-torch deps would fail to resolve.
+    if (process.platform === 'linux') {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(pip, [
+          '-m',
+          'pip',
+          'install',
+          '--progress-bar',
+          'off',
+          'torch==2.5.1',
+          'torchaudio==2.5.1',
+          '--index-url',
+          'https://download.pytorch.org/whl/cpu'
+        ])
+        child.stderr?.on('data', (chunk: Buffer) => {
+          const t = chunk.toString().trim()
+          if (t.startsWith('ERROR') || t.startsWith('error')) sendEnvEvent(t.slice(0, 200), 'error')
+        })
+        child.on('close', (code) =>
+          code === 0 ? resolve() : reject(new Error(`cpu torch install failed (${code})`))
+        )
+        child.on('error', reject)
+      })
+    }
+    // (already satisfied on linux by the cpu step above — pip skips it)
     await new Promise<void>((resolve, reject) => {
       const child = spawn(pip, [
         '-m',
