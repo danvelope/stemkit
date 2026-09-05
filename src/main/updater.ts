@@ -40,6 +40,11 @@ export function initUpdater(): void {
     }
   })
 
+  // electron-updater only supports AppImage on linux — deb installs update
+  // by re-downloading, so no automatic checks there (the handlers above
+  // stay registered and simply report no update)
+  if (process.platform === 'linux' && !process.env.APPIMAGE) return
+
   setTimeout(() => {
     autoUpdater.checkForUpdatesAndNotify().catch(() => {})
   }, 5000)

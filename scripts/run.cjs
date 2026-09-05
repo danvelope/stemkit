@@ -83,6 +83,7 @@ const STEPS = {
   'typecheck:web': [['tsc', '--noEmit', '-p', 'tsconfig.web.json']],
   dist: [['electron-vite', 'build'], ['electron-builder', '--mac']],
   'dist:win': [['electron-vite', 'build'], ['electron-builder', '--win']],
+  'dist:linux': [['electron-vite', 'build'], ['electron-builder', '--linux']],
   'dist:all': [['electron-vite', 'build'], ['electron-builder', '--mac', '--win']]
 }
 
@@ -148,7 +149,7 @@ function runSteps(steps) {
 
 // commands that produce or run the app need the bundled ffmpeg present;
 // typecheck and plain build do not
-const NEEDS_FFMPEG = new Set(['dev', 'dist', 'dist:win', 'dist:all'])
+const NEEDS_FFMPEG = new Set(['dev', 'dist', 'dist:win', 'dist:linux', 'dist:all'])
 
 function main() {
   const cmd = process.argv[2]

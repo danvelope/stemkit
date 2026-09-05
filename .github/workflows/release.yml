@@ -19,6 +19,8 @@ jobs:
             platform: mac
           - os: windows-latest
             platform: win
+          - os: ubuntu-22.04
+            platform: linux
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -38,8 +40,8 @@ jobs:
         if: steps.install.outcome == 'failure'
         run: npm install
 
-      - name: Fetch ffmpeg (mac)
-        if: matrix.platform == 'mac'
+      - name: Fetch ffmpeg (mac/linux)
+        if: matrix.platform == 'mac' || matrix.platform == 'linux'
         run: bash scripts/fetch-ffmpeg.sh
 
       - name: Fetch ffmpeg (win)
@@ -94,4 +96,6 @@ jobs:
             release/*.dmg
             release/*.exe
             release/*.zip
+            release/*.AppImage
+            release/*.deb
           if-no-files-found: error
