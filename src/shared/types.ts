@@ -20,7 +20,7 @@ export interface AppSettings {
   shifts: 1 | 2
   htdemucsFt: boolean
   roformerVocals: boolean
-  // windows + nvidia: separate on the GPU instead of the CPU. The toggle is
+  // windows/linux + nvidia: separate on the GPU instead of the CPU. The toggle is
   // only rendered when an NVIDIA GPU is detected; enabling it downloads the
   // CUDA build of torch (~2.5GB) on first use
   gpuSplit: boolean
@@ -45,7 +45,7 @@ export interface EngineStatus {
   vocalsReady: boolean
   ftDownloading: boolean
   ftVerified: boolean
-  // cuda torch engine (windows + nvidia only)
+  // cuda torch engine (windows/linux + nvidia only)
   gpuDownloading: boolean
   gpuReady: boolean
 }
@@ -57,7 +57,7 @@ export interface EnvStatus {
   bootstrapping: boolean
   updating: boolean
   gpu?: boolean
-  // windows only: an NVIDIA GPU was detected (gates the GPU toggle in Settings)
+  // windows/linux only: an NVIDIA GPU was detected (gates the GPU toggle in Settings)
   nvidiaGpu?: boolean
 }
 

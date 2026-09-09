@@ -18,8 +18,11 @@ import {
 } from './env'
 
 /* self-test mode, driven by STEMKIT_SMOKE=1 (used by the windows-smoke CI
-   job): runs the real bootstrap then separates a generated tone through
-   both engines and exits 0/1. No window is created */
+   job and manually on linux): runs the real bootstrap then separates a
+   generated tone through both engines and exits 0/1. No window is created.
+   On machines with an NVIDIA GPU the GPU section runs real cuda separations;
+   on GPU-less runners it checks the fail-fast paths and the CUDA wheel swap
+   with torch.cuda.is_available() staying false */
 
 const LOG_PATH = join(tmpdir(), 'stemkit-smoke.log')
 
@@ -212,11 +215,11 @@ export async function runSmoke(): Promise<boolean> {
     }
     log('roformer vocals ok')
 
-    // GPU plumbing on this GPU-less runner: --device cuda must fail fast
-    // with the friendly message (on the default cpu torch, before any big
-    // downloads), and the CUDA wheel swap must install cleanly while
-    // torch.cuda.is_available() stays false (no NVIDIA driver here). The
-    // real CUDA execution path still needs a machine with an NVIDIA GPU
+    // GPU plumbing: --device cuda must fail fast with the friendly message
+    // on the default cpu torch (before any big downloads). After the CUDA
+    // wheel swap, a GPU-less runner expects torch.cuda.is_available() to
+    // stay false, while an NVIDIA machine runs real cuda separations
+    // through both engines
     const nvidia = await detectNvidiaGpu()
     log(`nvidia gpu detected: ${nvidia}`)
 
@@ -244,25 +247,67 @@ export async function runSmoke(): Promise<boolean> {
           '-c', 'import torch;print("cuda", torch.version.cuda, int(torch.cuda.is_available()))'
         ])
         const [, ver, avail] = info.trim().split(/\s+/)
-        if (!ver || ver === 'None' || avail !== '0') {
-          log(`FAIL: unexpected torch cuda state: "${info.trim()}"`)
+        // driver present: cuda must be usable; otherwise it must stay off
+        const want = nvidia ? '1' : '0'
+        if (!ver || ver === 'None' || avail !== want) {
+          log(`FAIL: unexpected torch cuda state: "${info.trim()}" (want available=${want})`)
           return false
         }
-        log(`cuda torch ok (version.cuda=${ver}, available=0)`)
+        log(`cuda torch ok (version.cuda=${ver}, available=${avail})`)
       } catch (e) {
         log(`FAIL: could not probe torch cuda state: ${e instanceof Error ? e.message : String(e)}`)
         return false
       }
-      if (
-        !(await expectCudaFailure('cuda on cuda torch without nvidia driver', [
+      if (!nvidia) {
+        if (
+          !(await expectCudaFailure('cuda on cuda torch without nvidia driver', [
+            roformerScript(),
+            '--input', mix,
+            '--out', join(dir, 'stems-cuda-roformer'),
+            '--ckpt-dir', modelsDir(),
+            '--device', 'cuda'
+          ]))
+        ) {
+          return false
+        }
+      } else {
+        // real CUDA execution on this machine's GPU, both engines
+        const cudaDemucsOut = join(dir, 'stems-cuda-demucs')
+        const cudaDemucs = await runScript(venvPython(), [
+          separateScript(),
+          '--input', mix,
+          '--out', cudaDemucsOut,
+          '--model', 'htdemucs',
+          '--device', 'cuda'
+        ])
+        if (!cudaDemucs.ok) {
+          log(`FAIL: demucs cuda separation: ${cudaDemucs.error}`)
+          return false
+        }
+        log(`demucs cuda stems: ${cudaDemucs.stems.join(', ')}`)
+        for (const stem of cudaDemucs.stems) {
+          if (!isFloat32Wav(join(cudaDemucsOut, `${stem}.wav`))) {
+            log(`FAIL: cuda ${stem}.wav missing or not float32`)
+            return false
+          }
+        }
+        const cudaRoformerOut = join(dir, 'stems-cuda-roformer')
+        const cudaRoformer = await runScript(venvPython(), [
           roformerScript(),
           '--input', mix,
-          '--out', join(dir, 'stems-cuda-roformer'),
+          '--out', cudaRoformerOut,
           '--ckpt-dir', modelsDir(),
           '--device', 'cuda'
-        ]))
-      ) {
-        return false
+        ])
+        if (!cudaRoformer.ok) {
+          log(`FAIL: roformer cuda separation: ${cudaRoformer.error}`)
+          return false
+        }
+        if (!isFloat32Wav(join(cudaRoformerOut, 'vocals.wav'))) {
+          log('FAIL: cuda vocals.wav missing or not float32')
+          return false
+        }
+        log('cuda separations ok (demucs + roformer)')
       }
     }
 

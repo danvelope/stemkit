@@ -37,3 +37,35 @@ win:
 nsis:
   oneClick: true
   perMachine: false
+linux:
+  icon: build/icon.png
+  category: AudioVideo
+  executableName: stemkit
+  vendor: danvelope
+  maintainer: danvelope
+  synopsis: Local YouTube stem splitter and player
+  description: Split songs into isolated stems locally — vocals, drums, bass and more.
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  desktop:
+    StartupWMClass: stemkit
+  extraResources:
+    - from: extras/ffmpeg-linux/ffmpeg
+      to: ffmpeg/ffmpeg
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - libasound2

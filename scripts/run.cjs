@@ -48,7 +48,7 @@ function findNode(requiredMajor) {
       }
     } catch {}
   } else {
-    candidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node')
+    candidates.push('/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node')
     const nvmRoot = path.join(os.homedir(), '.nvm', 'versions', 'node')
     try {
       for (const ver of fs.readdirSync(nvmRoot)) {
@@ -83,13 +83,15 @@ const STEPS = {
   'typecheck:web': [['tsc', '--noEmit', '-p', 'tsconfig.web.json']],
   dist: [['electron-vite', 'build'], ['electron-builder', '--mac']],
   'dist:win': [['electron-vite', 'build'], ['electron-builder', '--win']],
+  'dist:linux': [['electron-vite', 'build'], ['electron-builder', '--linux']],
   'dist:all': [['electron-vite', 'build'], ['electron-builder', '--mac', '--win']]
 }
 
 function ffmpegBin() {
-  return IS_WIN
-    ? path.join(ROOT, 'extras', 'ffmpeg-win', 'ffmpeg.exe')
-    : path.join(ROOT, 'extras', 'ffmpeg-mac', 'ffmpeg')
+  if (IS_WIN) return path.join(ROOT, 'extras', 'ffmpeg-win', 'ffmpeg.exe')
+  if (process.platform === 'darwin')
+    return path.join(ROOT, 'extras', 'ffmpeg-mac', 'ffmpeg')
+  return path.join(ROOT, 'extras', 'ffmpeg-linux', 'ffmpeg')
 }
 
 /* the app shells out to a bundled ffmpeg. CI fetches it before packaging, so
@@ -147,7 +149,7 @@ function runSteps(steps) {
 
 // commands that produce or run the app need the bundled ffmpeg present;
 // typecheck and plain build do not
-const NEEDS_FFMPEG = new Set(['dev', 'dist', 'dist:win', 'dist:all'])
+const NEEDS_FFMPEG = new Set(['dev', 'dist', 'dist:win', 'dist:linux', 'dist:all'])
 
 function main() {
   const cmd = process.argv[2]

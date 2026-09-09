@@ -6,7 +6,7 @@ Search YouTube or paste a link, pick the instruments you want, and play the resu
 
 Everything runs locally — no accounts, no cloud, no API keys.
 
-![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-black) ![local](https://img.shields.io/badge/100%25-local-emerald)
+![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black) ![local](https://img.shields.io/badge/100%25-local-emerald)
 
 <p align="center">
   <img src="docs/stemkit.png" alt="StemKit splitting Queen's Bohemian Rhapsody into six stems — video player, presets and color-coded waveform lanes" width="100%" />
@@ -28,6 +28,7 @@ Everything runs locally — no accounts, no cloud, no API keys.
 Grab installers from [Releases](https://github.com/danvelope/stemkit/releases):
 - **macOS** (Apple Silicon): `StemKit-x.y.z-mac-arm64.dmg`
 - **Windows**: `StemKit-Setup-x.y.z.exe` (installer) or portable `.zip`
+- **Linux** (x64): `StemKit-x.y.z-linux-x86_64.AppImage` (portable, self-updating) or `StemKit-x.y.z-linux-amd64.deb`
 
 First launch creates a private Python environment and downloads the separation engine (~2 GB) — one time. ffmpeg is bundled — nothing else to install.
 
@@ -42,7 +43,7 @@ Optional quality upgrades live behind a gear icon in the app (Settings), each wi
 
 ## Requirements
 
-- **macOS 12+** (Apple Silicon) or **Windows 10/11** (x64)
+- **macOS 12+** (Apple Silicon) or **Windows 10/11** (x64) or **Linux x64** (Ubuntu 22.04+ or equivalent; NVIDIA driver for GPU splits)
 - No manual installs: if no Python 3.9+ is detected, StemKit downloads a private runtime (python-build-standalone) during first-launch setup
 - Node.js 20+ only for building from source
 
@@ -58,13 +59,16 @@ Wrong Node version? Scripts auto-relaunch with a suitable one (nvm / nvm-windows
 ## Build & release
 
 ```bash
-bash scripts/fetch-ffmpeg.sh        # mac (one time)
+bash scripts/fetch-ffmpeg.sh        # mac/linux (one time)
 powershell scripts/fetch-ffmpeg.ps1 # windows (one time)
 
 npm run dist        # mac dmg -> release/
 npm run dist:win    # windows nsis+zip -> release/
+npm run dist:linux  # linux AppImage+deb (x64) -> release/
 npm run dist:all    # both (on the matching OS)
 ```
+
+> **Linux**: building the `.deb` needs `dpkg` + `fakeroot` on the host; running the `.AppImage` needs FUSE. In-app self-update works on the AppImage — `.deb` installs update by re-downloading.
 
 Releases are built by GitHub Actions:
 - push a tag `v*` → binaries attach to a draft GitHub Release

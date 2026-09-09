@@ -124,13 +124,14 @@ export async function startJob(
     (settings.htdemucsFt && engine !== MODEL_EXTENDED ? '-ft' : '') +
     (settings.shifts === 2 ? '@s2' : '')
 
-  // windows honors the GPU toggle: 'cpu' is passed explicitly because
-  // roformer.py's 'auto' prefers CUDA whenever the venv's torch supports it.
-  // macOS keeps 'auto' (MPS when available)
-  const useGpu = settings.gpuSplit && process.platform === 'win32'
+  // windows/linux honor the GPU toggle: 'cpu' is passed explicitly because
+  // roformer.py's 'auto' prefers CUDA whenever the venv's torch supports it
+  // (and the default linux wheel is CUDA-capable, so toggle-off must still
+  // force CPU). macOS keeps 'auto' (MPS when available)
+  const useGpu = settings.gpuSplit && process.platform !== 'darwin'
   const deviceArg = (): string => {
-    if (process.platform === 'win32') return useGpu ? 'cuda' : 'cpu'
-    return 'auto'
+    if (process.platform === 'darwin') return 'auto'
+    return useGpu ? 'cuda' : 'cpu'
   }
 
   const job: ActiveJob = { videoId, model: modelTag, cancelled: false }
