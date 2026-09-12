@@ -352,7 +352,7 @@
       <p class="kicker">System requirements</p>
       <h2>Before you install.</h2>
       <div class="reqs">
-        <div class="req"><b>Operating system</b><span>macOS 12 or newer (Apple Silicon), or Windows 10 / 11</span></div>
+        <div class="req"><b>Operating system</b><span>macOS 12 or newer (Apple Silicon), Windows 10 / 11, or Linux (x64)</span></div>
         <div class="req"><b>First launch</b><span>StemKit sets up its own engine, about 2GB, one time. Nothing to install by hand.</span></div>
         <div class="req"><b>Disk space</b><span>About 2GB, downloaded once during setup.</span></div>
         <div class="req"><b>Internet</b><span>Needed to fetch songs from YouTube and for the one-time setup.</span></div>
@@ -386,14 +386,15 @@
     (function () {
       var REPO = 'danvelope/stemkit'
       var ua = navigator.userAgent
-      var os = /Mac/i.test(ua) ? 'mac' : /Win/i.test(ua) ? 'win' : null
+      var os = /Mac/i.test(ua) ? 'mac' : /Win/i.test(ua) ? 'win' : /Linux/i.test(ua) && !/Android/i.test(ua) ? 'linux' : null
 
       function apply(release) {
         var assets = release.assets || []
         var pick = null
         if (os === 'mac') pick = assets.find(function (a) { return a.name.endsWith('mac-arm64.dmg') })
         if (os === 'win') pick = assets.find(function (a) { return a.name.endsWith('win-x64.exe') })
-        var label = os === 'mac' ? 'Download for macOS' : os === 'win' ? 'Download for Windows' : 'Get StemKit'
+        if (os === 'linux') pick = assets.find(function (a) { return a.name.endsWith('.AppImage') })
+        var label = os === 'mac' ? 'Download for macOS' : os === 'win' ? 'Download for Windows' : os === 'linux' ? 'Download for Linux' : 'Get StemKit'
         var href = pick ? pick.browser_download_url : release.html_url
         var cap = pick
           ? 'StemKit ' + release.tag_name.replace(/^v/, '') + ' · ' + Math.round(pick.size / 1048576) + ' MB'
