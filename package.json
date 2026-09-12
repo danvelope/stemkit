@@ -1,7 +1,7 @@
 {
   "name": "stemkit",
   "productName": "StemKit",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "Local YouTube stem splitter and player",
   "main": "./out/main/index.js",
   "author": "daniel",
