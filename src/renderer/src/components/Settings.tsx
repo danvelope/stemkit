@@ -350,23 +350,6 @@ export function Settings({ settings, gpu, nvidiaGpu, onChange, onClose }: Props)
               />
             </div>
           </section>
-
-          <section className="pt-5 border-t border-white/[0.06] space-y-5">
-            <SectionHeader label="Privacy" />
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[13px] font-medium">Anonymous usage stats</p>
-                <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
-                  Helps improve StemKit with anonymous events (app version, OS,
-                  actions). Song titles, links and audio never leave your machine.
-                </p>
-              </div>
-              <Toggle
-                on={settings.analytics}
-                onClick={() => onChange({ analytics: !settings.analytics })}
-              />
-            </div>
-          </section>
         </div>
       </div>
     </div>

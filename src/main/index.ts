@@ -24,7 +24,6 @@ import { loadSongs, removeSong, stemBuffers, stemsDir, stemsFor, mixWavPath } fr
 import { startJob, cancelJob, searchYouTube } from './pipeline'
 import { initUpdater } from './updater'
 import { runSmoke } from './smoke'
-import { track, trackFromRenderer } from './analytics'
 import { getThumb, clearThumbMemo } from './thumbs'
 
 let mainWindow: BrowserWindow | null = null
@@ -183,7 +182,6 @@ app.whenReady().then(async () => {
     })
     if (result.canceled || !result.filePath) return { saved: false }
     copyFileSync(file, result.filePath)
-    track('export', { kind: 'stem', stem })
     return { saved: true, path: result.filePath }
   })
 
@@ -211,7 +209,6 @@ app.whenReady().then(async () => {
       copyFileSync(mix, join(target, `${sanitizeName(song?.title ?? 'full track')}.wav`))
       count += 1
     }
-    track('export', { kind: 'all', stems: count })
     return { saved: true, path: target, count }
   })
 
@@ -219,19 +216,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.handle('settings:get', () => loadSettings())
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
-    const prev = loadSettings()
     const next = saveSettings(patch)
     // hideVideo flips the thumbnail source, so cached lookups must retry
     clearThumbMemo()
-    for (const key of Object.keys(patch) as (keyof AppSettings)[]) {
-      if (prev[key] !== next[key]) track('settings_changed', { setting: key })
-    }
     return next
   })
   ipcMain.handle('thumb:get', (_e, videoId: string) => getThumb(videoId))
-  ipcMain.on('analytics:track', (_e, name: unknown, params: unknown) => {
-    trackFromRenderer(name, params)
-  })
   // the renderer confirms optional-engine downloads explicitly; nothing
   // starts as a side effect of flipping a toggle
   ipcMain.handle('engines:status', () => {
@@ -253,7 +243,6 @@ app.whenReady().then(async () => {
 
   await detectTools()
   await createWindow()
-  track('app_launch')
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()

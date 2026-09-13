@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { track } from './analytics'
 
 function send(status: string, payload?: Record<string, unknown>): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -16,19 +15,16 @@ export function initUpdater(): void {
 
   autoUpdater.on('checking-for-update', () => send('checking'))
   autoUpdater.on('update-available', (info) => {
-    track('update_available', { version: info.version })
     send('available', { version: info.version })
   })
   autoUpdater.on('update-not-available', (info) => send('none', { version: info.version }))
   autoUpdater.on('download-progress', (p) => send('progress', { pct: Math.round(p.percent) }))
   autoUpdater.on('update-downloaded', (info) => {
-    track('update_downloaded', { version: info.version })
     send('downloaded', { version: info.version })
   })
   autoUpdater.on('error', () => send('error'))
 
   ipcMain.handle('update:install', () => {
-    track('update_installed')
     autoUpdater.quitAndInstall()
   })
   ipcMain.handle('update:check', async () => {

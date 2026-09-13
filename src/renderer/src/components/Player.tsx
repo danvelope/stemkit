@@ -208,7 +208,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
       engine.setPlaying(true, posRef.current)
       hostRef.current?.play()
       setPlaying(true)
-      window.stemkit.trackEvent('playback_started', { video_hidden: hideVideo })
     }
   }, [decoding, decodeError, hideVideo])
 

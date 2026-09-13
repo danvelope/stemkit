@@ -26,7 +26,6 @@ const api: StemKitApi = {
   installUpdate: () => ipcRenderer.invoke('update:install'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
-  trackEvent: (name, params) => ipcRenderer.send('analytics:track', name, params),
   getThumb: (videoId) => ipcRenderer.invoke('thumb:get', videoId),
   onThumbCached: (cb) => subscribe<string>('thumb:cached', cb),
   enginesStatus: () => ipcRenderer.invoke('engines:status'),

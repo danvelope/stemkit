@@ -28,9 +28,8 @@ import {
   loadSongs
 } from './library'
 import type { JobEvent, JobStage } from '../shared/types'
-import { MODEL_DEFAULT, MODEL_EXTENDED, DEFAULT_STEMS } from '../shared/types'
+import { MODEL_DEFAULT, MODEL_EXTENDED } from '../shared/types'
 import { parseVideoId } from '../shared/url'
-import { track } from './analytics'
 import { cacheThumbnail } from './thumbs'
 
 interface ActiveJob {
@@ -157,11 +156,6 @@ export async function startJob(
       rmSync(songDir(videoId), { recursive: true, force: true })
     }
 
-    track('split_started', {
-      model: modelTag,
-      stems: stems?.length ?? DEFAULT_STEMS.length,
-      gpu: useGpu
-    })
     mkdirSync(songDir(videoId), { recursive: true })
     progress(job, 'metadata', 0, 'Reading video info')
 
@@ -457,7 +451,6 @@ export async function startJob(
         stems: producedStems,
         took
       })
-      track('split_completed', { model: job.model, stems: producedStems.length, took })
       send({ kind: 'done', data: { videoId, song: songs[0] } })
     } finally {
       release()
@@ -465,7 +458,6 @@ export async function startJob(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (message !== 'cancelled') {
-      track('split_failed', { model: job.model })
       send({ kind: 'failed', data: { videoId, message } })
     }
   } finally {
@@ -578,7 +570,6 @@ export async function searchYouTube(query: string): Promise<
               : undefined,
         duration: typeof e.duration === 'number' ? Math.round(e.duration) : undefined
       }))
-    track('search', { results: mapped.length })
     return mapped
   } catch {
     return []
